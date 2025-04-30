@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>Image Brick Breaker</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #000; }
+    canvas { display: block; margin: 0 auto; background: #000; }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+  <script>
+    const gridCount = 100;      // 가로/세로 격자 개수
+    const bottomMargin = 100;   // 패들 영역 높이
+    const paddleWidthDefault = 128;
+
+    let canvas = document.getElementById('gameCanvas');
+    let ctx = canvas.getContext('2d');
+
+    let brickImage = new Image();
+    brickImage.src = 'brick_map.png'; // 같은 폴더에 위치
+
+    // 상태 변수
+    let bricks = [];
+    let totalBricks = 0, brokenCount = 0;
+    let lives = 3;
+    let score = 0;
+    let paddle = { x: 0, y: 0, w: paddleWidthDefault, h: 20 };
+    let ball = { x: 0, y: 0, r: 8, vx:0, vy:0 };
+    let lastTime = 0;
+
+    brickImage.onload = () => {
+      const imgW = brickImage.width;
+      const imgH = brickImage.height;
+      canvas.width = imgW;
+      canvas.height = imgH + bottomMargin;
+
+      // 타일 크기 계산
+      const tileW = imgW / gridCount;
+      const tileH = imgH / gridCount;
+
+      // 브릭 생성
+      for (let row=0; row<gridCount; row++) {
+        for (let col=0; col<gridCount; col++) {
+          // 크롭 좌표
+          bricks.push({
+            sx: col*tileW, sy: row*tileH,
+            sw: tileW, sh: tileH,
+            dx: col*tileW, dy: row*tileH,
+            w: tileW, h: tileH
+          });
+        }
+      }
+      totalBricks = bricks.length;
+
+      // 패들 & 공 초기 위치
+      paddle.x = (imgW - paddle.w)/2;
+      paddle.y = imgH + 50;
+      resetBall();
+
+      // 이벤트
+      canvas.addEventListener('mousemove', e => {
+        const rect = canvas.getBoundingClientRect();
+        let mx = e.clientX - rect.left;
+        paddle.x = Math.max(0, Math.min(mx - paddle.w/2, imgW - paddle.w));
+        if (ball.vx===0 && ball.vy===0) ball.x = paddle.x + paddle.w/2;
+      });
+      canvas.addEventListener('mousedown', e => {
+        if (ball.vx===0 && ball.vy===0) fireBall();
+      });
+
+      requestAnimationFrame(loop);
+    };
+
+    function resetBall() {
+      ball.x = paddle.x + paddle.w/2;
+      ball.y = paddle.y - ball.r*2;
+      ball.vx = 0; ball.vy = 0;
+    }
+    function fireBall() {
+      const angle = Math.PI * 75/180 * ((Math.random()*2-1));
+      const speed = 300;
+      ball.vx = speed * Math.sin(angle);
+      ball.vy = -Math.abs(speed * Math.cos(angle));
+    }
+
+    function loop(timestamp) {
+      let dt = (timestamp - lastTime)/1000 || 0;
+      lastTime = timestamp;
+      update(dt);
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    function update(dt) {
+      // 공 이동
+      ball.x += ball.vx * dt;
+      ball.y += ball.vy * dt;
+
+      // 벽 충돌
+      if (ball.x - ball.r < 0 || ball.x + ball.r > canvas.width) ball.vx *= -1;
+      if (ball.y - ball.r < 0) ball.vy *= -1;
+
+      // 패들 충돌
+      if (ball.x > paddle.x && ball.x < paddle.x + paddle.w &&
+          ball.y + ball.r > paddle.y && ball.y - ball.r < paddle.y + paddle.h) {
+        // 반사
+        let rel = (ball.x - (paddle.x + paddle.w/2))/(paddle.w/2);
+        let ang = rel * Math.PI*75/180;
+        let speed = Math.hypot(ball.vx, ball.vy);
+        ball.vx = speed * Math.sin(ang);
+        ball.vy = -Math.abs(speed * Math.cos(ang));
+      }
+
+      // 브릭 충돌
+      bricks = bricks.filter(b => {
+        if (ball.x + ball.r > b.dx && ball.x - ball.r < b.dx + b.w &&
+            ball.y + ball.r > b.dy && ball.y - ball.r < b.dy + b.h) {
+          // 부순 브릭
+          brokenCount++;
+          score += 10;
+          ball.vy *= -1;
+          return false;
+        }
+        return true;
+      });
+
+      // 바닥 아래
+      if (ball.y - ball.r > canvas.height) {
+        lives--;
+        if (lives>0) resetBall();
+        else { /* Game Over */ }
+      }
+    }
+
+    function draw() {
+      // 배경
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      // 브릭
+      bricks.forEach(b => {
+        ctx.drawImage(brickImage, b.sx,b.sy,b.sw,b.sh, b.dx,b.dy,b.w,b.h);
+      });
+      // 패들
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(paddle.x, paddle.y, paddle.w, paddle.h);
+      // 공
+      ctx.fillStyle = '#f00';
+      ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.r, 0,Math.PI*2); ctx.fill();
+      // 점수
+      ctx.fillStyle='#fff'; ctx.font='20px sans-serif';
+      ctx.fillText('Score: '+score, 10, 30);
+      // 목숨
+      for(let i=0;i<lives;i++){
+        ctx.beginPath(); ctx.arc(canvas.width-20 - i*20, 20, 8,0,Math.PI*2); ctx.fill();
+      }
+    }
+  </script>
+</body>
+</html>
